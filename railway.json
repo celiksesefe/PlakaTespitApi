@@ -1,0 +1,13 @@
+{
+  "deploy": {
+    "startCommand": "python main.py",
+    "healthcheckPath": "/health",
+    "healthcheckTimeout": 300
+  },
+  "build": {
+    "buildCommand": "pip install -r requirements.txt"
+  },
+  "variables": {
+    "MAX_FILE_SIZE": "31457280"
+  }
+}

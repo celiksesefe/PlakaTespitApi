@@ -1,0 +1,11 @@
+venv/
+*.pyd
+*.dll
+*.lib
+*.so
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.env.*
