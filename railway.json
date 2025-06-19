@@ -3,6 +3,8 @@
     "builder": "DOCKERFILE"
   },
   "deploy": {
-    "healthcheckPath": "/health"
+    "healthcheckPath": "/health",
+    "healthcheckTimeout": 300,
+    "healthcheckInterval": 30
   }
 }
