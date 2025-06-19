@@ -1,7 +1,12 @@
+import os
 import logging
 import psutil
-import os
 import gc
+
+# Force headless mode for OpenCV and matplotlib
+os.environ['QT_QPA_PLATFORM'] = 'offscreen'
+os.environ['MPLBACKEND'] = 'Agg'
+
 from .config import MODEL_PATH, LANG_LIST, ENABLE_GPU
 from .exceptions import ModelLoadError
 
@@ -11,19 +16,28 @@ class ModelManager:
     def __init__(self):
         self.model = None
         self.ocr_reader = None
-        self.device = "cpu"  # Force CPU for Railway
-        # Don't load models in __init__ to avoid import errors
+        self.device = "cpu"
         self._models_loaded = False
     
     def _load_models(self):
-        """Load models with Railway compatibility"""
+        """Load models with headless compatibility"""
         if self._models_loaded:
             return
             
         try:
-            # Import here to avoid early import issues
-            from ultralytics import YOLO
-            import easyocr
+            # Set environment for headless operation
+            os.environ['OPENCV_VIDEOIO_PRIORITY_MSMF'] = '0'
+            os.environ['OPENCV_DNN_OPENCL_ALLOW_ALL_DEVICES'] = '0'
+            
+            # Import ultralytics with error handling
+            try:
+                from ultralytics import YOLO
+            except Exception as import_error:
+                logger.error(f"Failed to import ultralytics: {import_error}")
+                # Try to fix common import issues
+                import sys
+                sys.path.append('/opt/venv/lib/python3.11/site-packages')
+                from ultralytics import YOLO
             
             logger.info(f"Loading YOLO model from {MODEL_PATH}")
             
@@ -32,13 +46,19 @@ class ModelManager:
                 logger.error(f"Model file not found: {MODEL_PATH}")
                 raise ModelLoadError(f"Model file not found: {MODEL_PATH}")
             
-            # Load model with error handling
+            # Load model with headless settings
+            import torch
+            torch.set_num_threads(1)  # Reduce CPU usage
+            
             self.model = YOLO(MODEL_PATH)
             self.model.to("cpu")
             
-            # Force garbage collection
-            gc.collect()
+            # Configure for headless operation
+            if hasattr(self.model, 'overrides'):
+                self.model.overrides['verbose'] = False
+                self.model.overrides['plots'] = False
             
+            gc.collect()
             logger.info("YOLO model loaded successfully on CPU")
             
         except Exception as e:
@@ -49,17 +69,15 @@ class ModelManager:
             import easyocr
             logger.info(f"Loading OCR reader with languages: {LANG_LIST}")
             
-            # Configure EasyOCR for Railway
+            # Configure EasyOCR for headless operation
             self.ocr_reader = easyocr.Reader(
                 LANG_LIST,
-                gpu=False,  # Force CPU
+                gpu=False,
                 verbose=False,
                 download_enabled=True
             )
             
-            # Force garbage collection
             gc.collect()
-            
             logger.info("OCR reader loaded successfully")
             self._models_loaded = True
             
@@ -82,7 +100,6 @@ class ModelManager:
         return self.ocr_reader
     
     def get_memory_usage(self) -> dict:
-        """Get current memory usage"""
         try:
             process = psutil.Process(os.getpid())
             memory_info = process.memory_info()
@@ -94,5 +111,5 @@ class ModelManager:
         except:
             return {"error": "Unable to get memory info"}
 
-# Global model manager instance (lazy loading)
+# Global model manager instance
 model_manager = ModelManager()

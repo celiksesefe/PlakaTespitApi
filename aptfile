@@ -1,4 +1,5 @@
 libgl1-mesa-glx
+libgl1-mesa-dri
 libglib2.0-0
 libsm6
 libxext6
@@ -6,3 +7,13 @@ libxrender-dev
 libgomp1
 libfontconfig1-dev
 libfreetype6-dev
+libglu1-mesa
+libxi6
+libxrandr2
+libxss1
+libxcursor1
+libxcomposite1
+libxdamage1
+libxfixes3
+libgtk-3-0
+mesa-utils
