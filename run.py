@@ -1,50 +1,53 @@
+import uvicorn
 import os
 import sys
-import uvicorn
+import logging
 
-# Set headless environment variables BEFORE importing anything else
-os.environ['QT_QPA_PLATFORM'] = 'offscreen'
-os.environ['MPLBACKEND'] = 'Agg'
-os.environ['OPENCV_VIDEOIO_PRIORITY_MSMF'] = '0'
-os.environ['OPENCV_DNN_OPENCL_ALLOW_ALL_DEVICES'] = '0'
-os.environ['DISPLAY'] = ':99'  # Virtual display
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 def check_environment():
-    """Check environment and files"""
-    print("=== Environment Check ===")
-    print(f"Current directory: {os.getcwd()}")
-    print(f"Python version: {sys.version}")
+    """Check Docker environment"""
+    logger.info("=== Docker Environment Check ===")
+    logger.info(f"Current directory: {os.getcwd()}")
+    logger.info(f"Python version: {sys.version}")
     
-    # Check key environment variables
-    env_vars = ['QT_QPA_PLATFORM', 'MPLBACKEND', 'DISPLAY']
+    # Check environment variables
+    env_vars = ['QT_QPA_PLATFORM', 'MPLBACKEND', 'DISPLAY', 'PORT']
     for var in env_vars:
         value = os.getenv(var, 'Not set')
-        print(f"  {var}: {value}")
+        logger.info(f"  {var}: {value}")
     
     # Check required files
-    required_files = ["app/main.py", "app/config.py", "requirements.txt"]
+    required_files = ["app/main.py", "app/config.py"]
     for file in required_files:
         exists = os.path.exists(file)
-        print(f"  {file}: {'✓' if exists else '✗'}")
+        logger.info(f"  {file}: {'✓' if exists else '✗'}")
     
     # Check model file
     model_path = os.getenv("MODEL_PATH", "yolov8best.pt")
     model_exists = os.path.exists(model_path)
-    print(f"  Model ({model_path}): {'✓' if model_exists else '✗'}")
+    logger.info(f"  Model ({model_path}): {'✓' if model_exists else '✗'}")
     
-    print("========================\n")
+    logger.info("================================")
     return model_exists
 
 if __name__ == "__main__":
+    # Check environment
     model_exists = check_environment()
     
+    # Get port from environment (Railway sets this)
     port = int(os.getenv("PORT", 8000))
     host = "0.0.0.0"
     
-    print(f"Starting server on {host}:{port}")
+    logger.info(f"Starting server on {host}:{port}")
     
     if not model_exists:
-        print("WARNING: Model file not found!")
+        logger.warning("Model file not found. Predictions will fail.")
     
     try:
         uvicorn.run(
@@ -57,6 +60,7 @@ if __name__ == "__main__":
             reload=False
         )
     except Exception as e:
-        print(f"Failed to start server: {e}")
+        logger.error(f"Failed to start server: {e}")
         import traceback
         traceback.print_exc()
+        sys.exit(1)
