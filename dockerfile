@@ -1,4 +1,4 @@
-# Dockerfile
+# Dockerfile ismi değişti
 FROM python:3.11-slim
 
 # Set environment variables for headless operation
