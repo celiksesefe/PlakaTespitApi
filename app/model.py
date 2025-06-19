@@ -1,6 +1,3 @@
-import torch
-from ultralytics import YOLO
-import easyocr
 import logging
 import psutil
 import os
@@ -15,14 +12,27 @@ class ModelManager:
         self.model = None
         self.ocr_reader = None
         self.device = "cpu"  # Force CPU for Railway
-        self._load_models()
+        # Don't load models in __init__ to avoid import errors
+        self._models_loaded = False
     
     def _load_models(self):
-        """Load models with Railway memory constraints"""
+        """Load models with Railway compatibility"""
+        if self._models_loaded:
+            return
+            
         try:
+            # Import here to avoid early import issues
+            from ultralytics import YOLO
+            import easyocr
+            
             logger.info(f"Loading YOLO model from {MODEL_PATH}")
             
-            # Load model with memory optimization
+            # Check if model file exists
+            if not os.path.exists(MODEL_PATH):
+                logger.error(f"Model file not found: {MODEL_PATH}")
+                raise ModelLoadError(f"Model file not found: {MODEL_PATH}")
+            
+            # Load model with error handling
             self.model = YOLO(MODEL_PATH)
             self.model.to("cpu")
             
@@ -36,6 +46,7 @@ class ModelManager:
             raise ModelLoadError(f"Failed to load YOLO model: {str(e)}")
         
         try:
+            import easyocr
             logger.info(f"Loading OCR reader with languages: {LANG_LIST}")
             
             # Configure EasyOCR for Railway
@@ -50,17 +61,22 @@ class ModelManager:
             gc.collect()
             
             logger.info("OCR reader loaded successfully")
+            self._models_loaded = True
             
         except Exception as e:
             logger.error(f"Failed to load OCR reader: {e}")
             raise ModelLoadError(f"Failed to load OCR reader: {str(e)}")
     
     def get_model(self):
+        if not self._models_loaded:
+            self._load_models()
         if self.model is None:
             raise ModelLoadError("YOLO model not loaded")
         return self.model
     
     def get_ocr_reader(self):
+        if not self._models_loaded:
+            self._load_models()
         if self.ocr_reader is None:
             raise ModelLoadError("OCR reader not loaded")
         return self.ocr_reader
@@ -78,5 +94,5 @@ class ModelManager:
         except:
             return {"error": "Unable to get memory info"}
 
-# Global model manager instance
+# Global model manager instance (lazy loading)
 model_manager = ModelManager()

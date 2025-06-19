@@ -9,9 +9,8 @@ import os
 from .predict import predict_plate
 from .utils import validate_image
 from .exceptions import APIException
-from .model import model_manager
 
-# Configure logging for server deployment
+# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -20,30 +19,43 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="License Plate Detection API",
-    description="High-resolution optimized API for detecting and reading license plates from images",
+    description="High-resolution optimized API for detecting and reading license plates",
     version="2.0.0"
 )
 
 # Middleware for large file uploads
 class LargeUploadMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
-        # Set larger limits for file uploads
         request.scope["client_max_size"] = 30 * 1024 * 1024  # 30MB
         response = await call_next(request)
         return response
 
 app.add_middleware(LargeUploadMiddleware)
 
-# FastAPI configuration for large file uploads
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure specific origins in production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
-# Exception handler for custom API exceptions
+# Startup event to load models
+@app.on_event("startup")
+async def startup_event():
+    """Load models on startup"""
+    try:
+        logger.info("Starting model loading...")
+        # Import here to delay model loading
+        from .model import model_manager
+        
+        # Pre-load models (optional - they'll load on first request if not)
+        # model_manager._load_models()
+        logger.info("Application startup complete")
+    except Exception as e:
+        logger.error(f"Startup error: {e}")
+
+# Exception handler
 @app.exception_handler(APIException)
 async def api_exception_handler(request: Request, exc: APIException):
     return JSONResponse(
@@ -64,63 +76,53 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """Detailed health check with system info"""
-    memory_info = model_manager.get_memory_usage()
+    """Detailed health check"""
+    try:
+        from .model import model_manager
+        memory_info = model_manager.get_memory_usage()
+        models_loaded = model_manager._models_loaded
+    except:
+        memory_info = {"error": "Unable to get info"}
+        models_loaded = False
+    
     return {
         "status": "healthy",
         "timestamp": time.time(),
         "service": "license-plate-detection-api",
         "version": "2.0.0",
         "memory_usage": memory_info,
-        "models_loaded": {
-            "yolo": model_manager.model is not None,
-            "ocr": model_manager.ocr_reader is not None
-        },
+        "models_loaded": models_loaded,
         "max_file_size": "30MB"
     }
 
 @app.get("/system-info")
 async def system_info():
-    """System information endpoint for monitoring"""
-    memory_info = model_manager.get_memory_usage()
+    """System information"""
+    try:
+        from .model import model_manager
+        memory_info = model_manager.get_memory_usage()
+    except:
+        memory_info = {"error": "Unable to get info"}
+    
     return {
         "cpu_percent": psutil.cpu_percent(),
         "memory": memory_info,
-        "device": model_manager.device,
-        "models_loaded": {
-            "yolo": model_manager.model is not None,
-            "ocr": model_manager.ocr_reader is not None
-        }
+        "device": "cpu"
     }
 
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
-    """
-    High-resolution license plate prediction endpoint
-    Supports up to 30MB files in various formats
-    
-    Args:
-        file: Image file (jpg, png, webp, bmp, tiff)
-        
-    Returns:
-        JSON with detected plates and their information
-    """
+    """License plate prediction endpoint"""
     start_time = time.time()
     
     try:
-        # Validate file
         if not file.filename:
             raise APIException("No file provided", 400)
         
-        # Read file content
         image_bytes = await file.read()
-        
-        # Validate image
         validate_image(image_bytes, file.filename)
         
-        # Predict plates
         plates = predict_plate(image_bytes)
-        
         processing_time = time.time() - start_time
         
         logger.info(
@@ -139,10 +141,7 @@ async def predict(file: UploadFile = File(...)):
         }
         
     except APIException:
-        raise  # Re-raise API exceptions
+        raise
     except Exception as e:
         logger.error(f"Unexpected error processing {file.filename}: {e}")
-        raise HTTPException(
-            status_code=500, 
-            detail=f"Internal server error: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
